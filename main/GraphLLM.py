@@ -1,7 +1,6 @@
 import contextlib
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
 from DDM import DDMGraphModel
 
 BOS = '<s>[INST]'
