@@ -1,7 +1,6 @@
 import torch
 import json
 import spacy
-
 def generate_propositions(content,model,tokenizer,device):
     title = ""
     section = ""

@@ -6,7 +6,6 @@ from torch_geometric.nn import GCNConv, global_mean_pool
 from utils.collate import collate_fn
 from torch.utils.data import DataLoader
 from utils.config import parse_args_llama
-
 class ModelCheckpoint:
     def __init__(self):
         self.save_dir = '/data/GRAG/output/DDM'
