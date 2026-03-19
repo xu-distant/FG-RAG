@@ -32,14 +32,13 @@ class ModelCheckpoint:
     
     def load_model(self, model, optimizer, checkpoint_path):
         """
-        加载模型和优化器状态
+        Load model and optimizer states.
         """
         if not os.path.exists(checkpoint_path):
-            raise FileNotFoundError(f"找不到检查点文件: {checkpoint_path}")
+            raise FileNotFoundError(f"Checkpoint file not found: {checkpoint_path}")
             
         checkpoint = torch.load(checkpoint_path)
         
-        # Load the model and optimizer state
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         
@@ -65,7 +64,6 @@ class DDMGraphModel(nn.Module):
         super().__init__()
         self.num_timesteps = num_timesteps
         self.max_length=max_length
-        # time embedding
         self.time_embed = nn.Sequential(
             nn.Linear(1, hidden_dim),
             nn.SiLU(),
@@ -116,14 +114,12 @@ class DDMGraphModel(nn.Module):
         return self.time_embed(t)
     def graph_readout(self, node_features):
         graph_repr=node_features.mean(dim=0)
-        sentence_features = self.sentence_mapping(graph_repr)  # [max_length * input_dim]
-        sentence_features = sentence_features.reshape(self.max_length, -1)  # [max_length, input_dim]
+        sentence_features = self.sentence_mapping(graph_repr)  
+        sentence_features = sentence_features.reshape(self.max_length, -1)  
         return sentence_features
     
     def forward(self, x, edge_index, t):
-        # Get time embedding
         t_emb = self._get_time_embedding(t)
-        # Concatenate the time information with the node features.
         x = torch.cat([x, t_emb], dim=-1)
         # Encoder stage (denoising process)
         if edge_index.size(0)==0:
@@ -131,7 +127,6 @@ class DDMGraphModel(nn.Module):
         else:
             h = x
             skip_connection = None
-
             for i, encoder_gnn in enumerate(self.encoder_gnns):
                 h = encoder_gnn(h, edge_index)
                 if i == 0:
@@ -140,7 +135,6 @@ class DDMGraphModel(nn.Module):
             # Decoder stage
             for decoder_gnn in self.decoder_gnns:
                 h = decoder_gnn(h, edge_index)
-
         latent_code = self.mlp(h)
         return latent_code
 
@@ -151,12 +145,9 @@ class DDMGraphModel(nn.Module):
        else:
            mu = x.mean(dim=0, keepdim=True)
            sigma = x.std(dim=0, keepdim=True)
-           bar_epsilon = mu + sigma * epsilon  # \bar{\epsilon} = \mu + \sigma \odot \epsilon
+           bar_epsilon = mu + sigma * epsilon  
+       epsilon_prime = torch.sign(x) * torch.abs(bar_epsilon)  
        
-       # Ensure noise shares the same sign as the features
-       epsilon_prime = torch.sign(x) * torch.abs(bar_epsilon)  # \epsilon' = \text{sgn}(x_{0,i}) \odot |\bar{\epsilon}|
-       
-       # Compute the noise-added features.
        sqrt_alpha_cumprod = self.sqrt_alphas_cumprod[t].view(-1, 1)
        sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod[t].view(-1, 1)
        
@@ -172,10 +163,7 @@ class DDMGraphModel(nn.Module):
            sqrt_one_minus_alpha_cumprod = self.sqrt_one_minus_alpha_cumprod[t].view(-1, 1)
            t = torch.full((x_t.size(0),), t, device=device)
            predicted_x0 = self.forward(x_t, edge_index, t)
-           
            noise = torch.randn_like(x_t) if t[0] > 0 else 0
-           
-           # Reverse diffusion
            x_t = sqrt_alpha_cumprod * predicted_x0 + sqrt_one_minus_alpha_cumprod * noise
        
        return self.graph_readout(x_t)
@@ -185,16 +173,13 @@ class DDMLoss(nn.Module):
         self.lambda_smooth = lambda_smooth
         
     def forward(self, pred, target, edge_index):
-        # Reconstruction loss
         recon_loss = F.mse_loss(pred, target)
         return  recon_loss
        
 def train_ddm(model, train_loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
-    
     for batch in train_loader:
-
         optimizer.zero_grad()
         subgraph=batch['sub_graphs'][0][0]
         subgraph=subgraph.to(device)
@@ -202,20 +187,15 @@ def train_ddm(model, train_loader, optimizer, criterion, device):
         edge_index=subgraph.edge_index
         if edge_index.size(0)==0:continue
         x=x.mean(dim=1)
-    
         t = torch.randint(0, model.num_timesteps, (x.size(0),), device=device)
         noisy_features=model.add_noise(x,t)
-
         latent_code = model(noisy_features, edge_index, t)
         loss = criterion(latent_code, x,edge_index)
         loss.backward()
         optimizer.step()
-        
         total_loss += loss.item()
     
     return total_loss / len(train_loader)
-
-
 
 
 def main(args):
@@ -227,7 +207,6 @@ def main(args):
     batch_size = args.batch_size
     subgraphs_train=torch.load('/data/processed/hotpotqa_train.pt')
     train_loader = DataLoader(subgraphs_train, batch_size=batch_size, drop_last=True, shuffle=True, collate_fn=collate_fn)
-    # Initialize the model.
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = DDMGraphModel(input_dim, hidden_dim, latent_dim,max_length,num_timesteps).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)

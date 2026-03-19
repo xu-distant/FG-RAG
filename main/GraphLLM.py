@@ -59,9 +59,7 @@ class GraphLLM(torch.nn.Module):
             num_timesteps=ddm_num_timesteps,
         ).to(device)
         checkpoint = torch.load('/data/GRAG/output/DDM/DDM_model.pth')
-        # 加载模型
         DDMmodel.load_state_dict(checkpoint['model_state_dict'])
-
         self.graph_encoder = DDMmodel.to(device)
         self.word_embedding = self.model.model.get_input_embeddings()
 
@@ -80,7 +78,6 @@ class GraphLLM(torch.nn.Module):
     def forward(self, samples):
         questions = self.tokenizer(samples["question"], add_special_tokens=False)
         labels = self.tokenizer(samples["answer"], add_special_tokens=False)
-        # encode special tokens
         eos_tokens = self.tokenizer(EOS, add_special_tokens=False)
         eos_user_tokens = self.tokenizer(EOS_USER, add_special_tokens=False)
         bos_embeds = self.word_embedding(
@@ -126,12 +123,9 @@ class GraphLLM(torch.nn.Module):
         nodes = samples['sub_graphs'][0][0].node_embeddings.to(self.model.device)
         edge_index = samples['sub_graphs'][0][0].edge_index.to(self.model.device)
         questions = self.tokenizer(samples["question"], add_special_tokens=False)
-        # encode special tokens
         eos_user_tokens = self.tokenizer(EOS_USER, add_special_tokens=False)
         bos_embeds = self.word_embedding(
             self.tokenizer(BOS, add_special_tokens=False, return_tensors='pt').input_ids[0].to(self.model.device))
-
-
         graph_embeds = self.graph_encoder.infer(nodes, edge_index, 120, self.model.device)
         batch_size = 1
         batch_inputs_embeds = []
@@ -163,12 +157,9 @@ class GraphLLM(torch.nn.Module):
     def inference1(self, embeds,question):
 
         question = self.tokenizer(question, add_special_tokens=False)
-        # encode special tokens
         eos_user_tokens = self.tokenizer(EOS_USER, add_special_tokens=False)
         bos_embeds = self.word_embedding(
             self.tokenizer(BOS, add_special_tokens=False, return_tensors='pt').input_ids[0].to(self.model.device))
-
-
         batch_inputs_embeds = []
         batch_attention_mask = []
         input_ids = question.input_ids + eos_user_tokens.input_ids
@@ -185,7 +176,7 @@ class GraphLLM(torch.nn.Module):
                 max_new_tokens=self.max_new_tokens,
                 attention_mask=attention_mask,
                 # do_sample=True,
-                use_cache=True,  # IMPORTANT!
+                use_cache=True,  
 
             )
         pred = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
